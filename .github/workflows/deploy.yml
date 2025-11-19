@@ -3,63 +3,81 @@ name: Desplegament Hundir la Flota  # Nom del workflow: visible a Actions tab
 on:
   push:
     branches: [ main ]  # S'activa en push a main; pots canviar a workflow_dispatch per manual
-  workflow_dispatch:   # Permet executar manualment des de GitHub UI
+  workflow_dispatch:   # Permet executar manualment des de GitHub UI (clica "Run workflow")
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest  # Runner: Ubuntu per Docker suport
+    runs-on: ubuntu-latest  # Runner: Ubuntu per Docker suport (gratis, amb Docker preinstalat)
 
     steps:
-    - name: Checkout code  # Pas 1: Clona el repo al runner
-      uses: actions/checkout@v4  # Acció oficial GitHub per baixar el codi
+    - name: Checkout code  # Pas 1: Clona tot el repo al runner (codi, Dockerfiles, compose)
+      uses: actions/checkout@v4  # Acció oficial GitHub per baixar el codi fresc
 
-    - name: Set up Docker Buildx  # Pas 2: Configura Docker per build multi-plat (essencial per compose)
-      uses: docker/setup-buildx-action@v3  # Acció oficial per estendre Docker
+    - name: Set up Docker Buildx  # Pas 2: Configura Docker Buildx per builds ràpids i multi-plat (millor per compose)
+      uses: docker/setup-buildx-action@v3  # Extén Docker amb Buildx per cache i paral·lelisme
 
-    - name: Build and start containers  # Pas 3: Build i arrenca els 2 contenidors amb docker-compose
+    - name: Install dependencies  # Pas 3: Instal·la eines extra (jq per JSON, curl per API; evita errors "command not found")
       run: |
-        # Crea xarxa per compose
-        docker network create hundir-network
-        # Build imatges (backend custom, frontend usa nginx:stable)
-        docker-compose build --no-cache
-        # Arrança en background (detached) i exposa ports: frontend a 8080, backend a 3000
-        docker-compose up -d
-        # Espera que estiguin sans (healthcheck del compose)
-        sleep 30  # Petit delay per startup
-        docker-compose ps  # Log per veure status
+        sudo apt update
+        sudo apt install -y jq curl wget  # jq: parseja JSON de Ngrok; curl/wget: peticions web
+        # Chequea Docker i Compose v2 (per logs)
+        docker --version
+        docker compose version  # Confirma v2 està OK
 
-    - name: Install and auth Ngrok  # Pas 4: Instal·la Ngrok i autentica amb token secret
+    - name: Build and start containers  # Pas 4: Build i arrenca els 2 contenidors (frontend Nginx + backend FastAPI)
       run: |
-        # Descarrega binari Ngrok (versió estable)
+        # Crea xarxa personalitzada per comunicació interna (frontend → backend)
+        docker network create hundir-network || true  # || true: ignora si ja existeix
+        # Build imatges: backend des de Dockerfile (Python/FastAPI), frontend usa nginx:stable
+        docker compose build --no-cache  # --no-cache: rebuild fresc, evita caches vells (nota: sense guión!)
+        # Arrança en background (detached mode) amb ports exposats
+        docker compose up -d  # -d: detached, no bloqueja (sense guión!)
+        # Espera startup (FastAPI pot tardar) i chequea health
+        sleep 30  # Delay inicial
+        docker compose ps  # Log status dels contenidors (sense guión!)
+        # Test health: ping al backend (ajusta /health si el teu endpoint és diferent)
+        curl -f http://localhost:3000/health || echo "Healthcheck OK si 200, ignora si no tens endpoint"
+
+    - name: Install and auth Ngrok  # Pas 5: Descarrega i autentica Ngrok per túnel segur (HTTPS extern)
+      run: |
+        # Descarrega binari Ngrok v3 (estable per Linux AMD64)
         wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
         tar xvzf ngrok-v3-stable-linux-amd64.tgz
-        sudo mv ngrok /usr/local/bin/
-        # Autentica amb el secret del repo
-        ngrok config add-authtoken ${{ secrets.NGROK_TOKEN }}
+        sudo mv ngrok /usr/local/bin/  # Mou a PATH global
+        # Autentica amb secret del repo (sense expondre-lo als logs)
+        ngrok config add-authtoken ${{ secrets.NGROK_TOKEN }}  # Falla si no tens el secret!
 
-    - name: Create Ngrok tunnel  # Pas 5: Crea túnel HTTP al frontend (port 8080) per visualitzar des de fora
+    - name: Create Ngrok tunnel  # Pas 6: Crea túnel HTTP al frontend (port 8080) i extreu URL pública
       run: |
-        # Arrança túnel en background i captura URL pública
-        ngrok http 8080 --log=stdout > ngrok.log 2>&1 &
-        NGROK_PID=$!
-        # Espera uns segons per inicialitzar
-        sleep 10
-        # Extreu l'URL pública[](https://random.ngrok.io) i imprimeix-la als logs (profe la veurà)
-        PUBLIC_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
-        echo "🌐 Frontend accessible at: $PUBLIC_URL"
-        echo "🔗 Backend internal: http://localhost:3000 (via compose)"
-        # Mata el procés Ngrok al final d'aquest pas? No, continua al següent
+        # Arrança servidor Ngrok en background (túnel al 8080 del frontend)
+        nohup ngrok http 8080 --log=stdout > ngrok.log 2>&1 &
+        NGROK_PID=$!  # Guarda PID per matar després
+        sleep 10  # Espera inicialització (Ngrok API a :4040)
+        # Obté URL pública via API local de Ngrok (parseja amb jq)
+        PUBLIC_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url // empty')
+        if [ -z "$PUBLIC_URL" ]; then
+          echo "❌ Error: No Ngrok URL. Chequea logs: $(cat ngrok.log | tail -5)"
+          exit 1
+        fi
+        echo "🌐 Frontend accessible at: $PUBLIC_URL"  # Profe veu això als logs!
+        echo "🔗 Backend internal (per debug): http://localhost:3000"
+        echo "🕐 Túnel actiu per 10 min..."  # Recordatori
 
-    - name: Keep alive for 10 minutes  # Pas 6: Manté el desplegament viu 10 min (600s) per testing
+    - name: Keep alive for 10 minutes  # Pas 7: Manté tot viu 10 min (600s) per testing (profe accedeix via URL)
       run: |
-        echo "🚀 Desplegament actiu! Esperant 10 minuts..."
-        sleep 600  # 10 min exactes; durant això, el profe pot accedir via URL Ngrok
-        # Opcional: Logs finals
-        docker-compose logs --tail=10
+        echo "🚀 Desplegament actiu! Profe, obre la URL Ngrok ara i juga 10 min."
+        sleep 600  # Exactament 10 min; durant això, contenidors + túnel corren
+        # Logs finals per debug
+        docker compose logs --tail=20 backend  # Últims logs del backend (FastAPI errors?) (sense guión!)
+        docker compose logs --tail=10 frontend  # Nginx logs (sense guión!)
 
-    - name: Cleanup  # Pas 7: Neteja al final (borra contenidors per no gastar recursos del runner)
-      if: always()  # S'executa sempre, encara que falli
+    - name: Cleanup  # Pas 8: Neteja automàtica (allibera recursos del runner; sempre s'executa)
+      if: always()  # S'executa encara que falli (important per no deixar "fantasmes")
       run: |
-        docker-compose down -v --remove-orphans
+        # Para i borra contenidors/volums/xarxes
+        docker compose down -v --remove-orphans --rmi local  # -v: vols, --rmi: imatges locals (sense guión!)
         docker network rm hundir-network || true
-        pkill ngrok || true  # Mata Ngrok si corre
+        # Mata Ngrok
+        kill $NGROK_PID || pkill ngrok || true
+        rm -f ngrok*  # Neteja fitxers temp
+        echo "🧹 Cleanup fet. Ready per next run!"
