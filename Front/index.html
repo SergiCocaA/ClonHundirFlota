@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hundir la Flota</title>
+    <link rel="stylesheet" href="index.css">
+</head>
+
+<body>
+    <header>
+        <h1 class="titulo2">Battle Grid</h1>
+        <h1 class="titulo">Battle Grid</h1>
+    </header>
+
+    <hr>
+    <div class="pagina">
+        <div id="bloc1" class="bloc1">
+            <div class="menuConf">
+                <div class="bloc1p1">
+                    <h2>Configuración del Juego</h2>
+                    <div class="medidas">
+                        <div class="filas">
+                            <label for="filas">Anchura 7-20</label><br><input type="number" id="filas" min="7"
+                                max="20"><br>
+                        </div>
+                        <div class="columnas">
+                            <label for="columnas">Altura 7-20</label><br><input type="number" id="columnas" min="7"
+                                max="20"><br>
+                        </div>
+
+                    </div>
+                    <div class="num-barcos">
+                        <label for="numBarcos">Número de barcos (1-10)</label><br>
+                        <input type="range" id="numBarcos" min="1" max="10">
+                    </div>
+                </div>
+                <div class="dificultad">
+                    <label>Dificultad</label><br>
+                    <label><input id="facil" class="" type="radio" name="dificultad" value="facil"> Fácil</label><br>
+                    <label><input id="medio" type="radio" name="dificultad" value="media"> Media</label><br>
+                    <label><input id="dificil" type="radio" name="dificultad" value="dificil"> Difícil</label>
+                </div>
+                <div class="botones">
+                    <label for="nombre">Nombre de usuario</label><input type="text" id="nombre"><br>
+                    <button id="datos" type="button">Enviar Datos</button>
+                    <div class="difcultad" id="textoDificultad">Dificultad</div>
+                    <button id="reiniciar" type="button">Reiniciar</button>
+                    <button id="abandonar" type="button">Abandonar</button>
+                </div>
+            </div>
+            <div class="imagenMando">
+                <img class="mando" src="img/gameOn.jpg" alt="imagenmando">
+            </div>
+        </div>
+        <div id="bloc23" class="bloc23">
+            <div id="bloc2" class="bloc2">
+                <div class="tablero">
+                    <h1>Tablero</h1>
+                    <table>
+                        <tbody id="tabla"></tbody>
+                    </table>
+                </div>
+                <div class="botonDisparo">
+                    <button id="disparar" type="button">Disparar</button>
+                </div>
+            </div>
+            <div id="bloc3" class="bloc3">
+                <div class="bloc3p1">
+                    <div id="marcador" class="marcador">
+                        <div>
+                            <h2>Marcador</h2>
+                            <p id="puntosGanados"></p>
+                            <p id="puntos" class="puntos">1000 <br>Puntos</p>
+                        </div>
+
+                    </div>
+                    <div class="estats">
+                        <h2>Estadísticas</h2>
+                        <p class="jugador" id="jugador">Jugador: </p>
+                    </div>
+
+                    <div class="estats2">
+                        <h2>Estadísticas del Jugador</h2>
+                        <div id="disparos1" class="disparos">
+                            <p class="disparosAcertados" id="disparos">Disparos acertados: 0</p>
+                            <p class="disparosFallados" id="disparosFallados">Disparos fallados: 0</p>
+                        </div>
+                        <p class="barcosHundidos" id="barcosHundidos">Barcos hundidos: 0</p>
+                    </div>
+                    <div class="jugadas">
+                        <h2>Número de jugadas</h2>
+                        <p id="totalDisparos">0</p>
+                    </div>
+                    <hr class="hr">
+                    <div id="ultimaJugada">
+                        <p>Último mensaje: </p>
+                    </div>
+                </div>
+                <div id="imagenMario" class="imagenMario">
+                    <hr class="barraMario1">
+                    <img class="mario" src="img/mario.png" alt="marioLuigi">
+                    <hr class="barraMario2">
+                </div>
+            </div>
+
+        </div>
+        <div id="estadisticas">
+            <div>
+                <h1 id="final"></h1>
+            </div>
+            <h2>Estadísticas Globales</h2>
+
+            <div class="info-general">
+                <p><strong>Mejor jugador:</strong> <span id="mejorJugador"></span></p>
+                <p><strong>Mejor puntuación:</strong> <span id="mejorPuntuacion"></span></p>
+                <p><strong>Total de partidas:</strong> <span id="totalPartidas"></span></p>
+            </div>
+
+            <h3>Top 5 Mejores Jugadores</h3>
+            <table class="tabla-top5">
+                <thead>
+                    <tr>
+                        <th>Jugador</th>
+                        <th>Puntuación</th>
+                        <th>Filas</th>
+                        <th>Columnas</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td id="jugador0"></td>
+                        <td id="puntuacion0"></td>
+                        <td id="filas0"></td>
+                        <td id="columnas0"></td>
+                    </tr>
+                    <tr>
+                        <td id="jugador1"></td>
+                        <td id="puntuacion1"></td>
+                        <td id="filas1"></td>
+                        <td id="columnas1"></td>
+                    </tr>
+                    <tr>
+                        <td id="jugador2"></td>
+                        <td id="puntuacion2"></td>
+                        <td id="filas2"></td>
+                        <td id="columnas2"></td>
+                    </tr>
+                    <tr>
+                        <td id="jugador3"></td>
+                        <td id="puntuacion3"></td>
+                        <td id="filas3"></td>
+                        <td id="columnas3"></td>
+                    </tr>
+                    <tr>
+                        <td id="jugador4"></td>
+                        <td id="puntuacion4"></td>
+                        <td id="filas4"></td>
+                        <td id="columnas4"></td>
+                    </tr>
+                </tbody>
+            </table>
+
+        </div>
+    </div>
+    <script src="main.js"></script>
+</body>
+
+</html>
