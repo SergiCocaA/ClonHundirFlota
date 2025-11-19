@@ -1,58 +1,65 @@
-name: Deploy Hundir la Flota
+name: Desplegament Hundir la Flota  # Nom del workflow: visible a Actions tab
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
+    branches: [ main ]  # S'activa en push a main; pots canviar a workflow_dispatch per manual
+  workflow_dispatch:   # Permet executar manualment des de GitHub UI
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Runner: Ubuntu per Docker suport
 
     steps:
-      # 1️⃣ Checkout
-      
-name: Checkout repository
-      uses: actions/checkout@v4
+    - name: Checkout code  # Pas 1: Clona el repo al runner
+      uses: actions/checkout@v4  # Acció oficial GitHub per baixar el codi
 
-      # 2️⃣ Arrencar contenidors
-      
-name: Start Docker containers
-      run: docker compose up -d
+    - name: Set up Docker Buildx  # Pas 2: Configura Docker per build multi-plat (essencial per compose)
+      uses: docker/setup-buildx-action@v3  # Acció oficial per estendre Docker
 
-      # 3️⃣ Instal·lar Ngrok
-      
-name: Install Ngrok
+    - name: Build and start containers  # Pas 3: Build i arrenca els 2 contenidors amb docker-compose
       run: |
-        curl -sLo ngrok.zip https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.zip
-        unzip -o ngrok.zip
+        # Crea xarxa per compose
+        docker network create hundir-network
+        # Build imatges (backend custom, frontend usa nginx:stable)
+        docker-compose build --no-cache
+        # Arrança en background (detached) i exposa ports: frontend a 8080, backend a 3000
+        docker-compose up -d
+        # Espera que estiguin sans (healthcheck del compose)
+        sleep 30  # Petit delay per startup
+        docker-compose ps  # Log per veure status
+
+    - name: Install and auth Ngrok  # Pas 4: Instal·la Ngrok i autentica amb token secret
+      run: |
+        # Descarrega binari Ngrok (versió estable)
+        wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
+        tar xvzf ngrok-v3-stable-linux-amd64.tgz
         sudo mv ngrok /usr/local/bin/
-        sudo chmod +x /usr/local/bin/ngrok
+        # Autentica amb el secret del repo
+        ngrok config add-authtoken ${{ secrets.NGROK_TOKEN }}
 
-      # 4️⃣ Autenticació amb el secret NGROK_AUTHTOKEN
-      
-name: Authenticate Ngrok
+    - name: Create Ngrok tunnel  # Pas 5: Crea túnel HTTP al frontend (port 8080) per visualitzar des de fora
       run: |
-        ngrok config add-authtoken ${{ secrets.NGROK_AUTHTOKEN }}
+        # Arrança túnel en background i captura URL pública
+        ngrok http 8080 --log=stdout > ngrok.log 2>&1 &
+        NGROK_PID=$!
+        # Espera uns segons per inicialitzar
+        sleep 10
+        # Extreu l'URL pública[](https://random.ngrok.io) i imprimeix-la als logs (profe la veurà)
+        PUBLIC_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+        echo "🌐 Frontend accessible at: $PUBLIC_URL"
+        echo "🔗 Backend internal: http://localhost:3000 (via compose)"
+        # Mata el procés Ngrok al final d'aquest pas? No, continua al següent
 
-      # 5️⃣ Crear túnel i mostrar URL pública
-      
-name: Start Ngrok tunnel
+    - name: Keep alive for 10 minutes  # Pas 6: Manté el desplegament viu 10 min (600s) per testing
       run: |
-        ngrok http 8080 --log=stdout > ngrok.log &
-        sleep 5
+        echo "🚀 Desplegament actiu! Esperant 10 minuts..."
+        sleep 600  # 10 min exactes; durant això, el profe pot accedir via URL Ngrok
+        # Opcional: Logs finals
+        docker-compose logs --tail=10
 
-          NGROK_URL=$(curl --silent http://127.0.0.1:4040/api/tunnels | \
-                       grep -oP '"public_url":"\Khttps://[^"]+')
-
-          echo "🌐 URL pública del FrontEnd: $NGROK_URL"
-          echo "::notice title=URL::$NGROK_URL"
-
-          # Manté el projecte obert 10 minuts
-          sleep 600
-
-      # 6️⃣ Neteja
-      
-name: Stop Docker containers
-      if: always()
-      run: docker compose down
+    - name: Cleanup  # Pas 7: Neteja al final (borra contenidors per no gastar recursos del runner)
+      if: always()  # S'executa sempre, encara que falli
+      run: |
+        docker-compose down -v --remove-orphans
+        docker network rm hundir-network || true
+        pkill ngrok || true  # Mata Ngrok si corre
