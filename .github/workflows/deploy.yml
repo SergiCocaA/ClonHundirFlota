@@ -1,1 +1,95 @@
+name: Desplegament Hundir la Flota + Ngrok
 
+on:
+  workflow_dispatch:      # El professor l'executa manualment
+
+jobs:
+  deploy-and-expose:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Descàrrega del codi del repositori
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Configurar Docker Buildx (per construir imatges més ràpid)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 3. Login a Docker Hub (opcional, només si vols pujar les imatges)
+      #    (pots ometre-ho si només construeixes localment)
+      # - name: Login to Docker Hub
+      #   uses: docker/login-action@v3
+      #   with:
+      #     username: ${{ secrets.DOCKERHUB_USERNAME }}
+      #     password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 4. Construir i aixecar els dos contenidors amb docker-compose
+      - name: Build and start containers
+        run: |
+          docker compose up -d --build
+        # -d = detached (en segon pla)
+
+      # 5. Esperar que els contenidors estiguin preparats
+      - name: Wait for containers to be healthy
+        run: |
+          echo "Esperant que el frontend estigui llest (port 3000 o 80)..."
+          timeout=60
+          while ! curl -s http://localhost:3000 > /dev/null; do
+            sleep 2
+            timeout=$((timeout-2))
+            if [ $timeout -le 0 ]; then
+              echo "Timeout! El frontend no respon"
+              docker compose logs
+              exit 1
+            fi
+          done
+          echo "Frontend està actiu!"
+
+      # 6. Instal·lar i configurar Ngrok (túnel públic)
+      - name: Install and start Ngrok
+        run: |
+          # Descarregar ngrok
+          curl -s https://bin.equinox.io/c/bNyj1mQVY4/ngrok-v3-stable-linux-amd64.tgz | tar xz
+          chmod +x ngrok
+          
+          # Afegir el token d'autenticació (obligatori)
+          ./ngrok config add-authtoken ${{ secrets.NGROK_AUTHTOKEN }}
+          
+          # Iniciar túnel cap al port del frontend (canvia 3000 pel teu port)
+          ./ngrok http 3000 --log=stdout > ngrok.log &
+          
+          # Esperar que el túnel estigui creat
+          sleep 10
+          
+          # Obtenir la URL pública i mostrar-la
+          NGROK_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+          echo "🚀 EL TEU JOC ESTÀ ACCESSIBLE AQUÍ DURANT ~10 MINUTS:"
+          echo "🌐 $NGROK_URL"
+          echo "NGROK_URL=$NGROK_URL" >> $GITHUB_ENV
+
+      # 7. Mostrar la URL al summary del workflow (el professor la veu fàcilment)
+      - name: Show public URL
+        run: |
+          echo "🎮 **Hundir la Flota desplegat correctament!**" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 **URL pública (Ngrok):** $NGROK_URL" >> $GITHUB_STEP_SUMMARY
+          echo "⏰ Aquesta URL funcionarà durant els propers ~10 minuts" >> $GITHUB_STEP_SUMMARY
+
+      # 8. Mantenir els contenidors i el túnel actius 10 minuts
+      - name: Keep workflow alive for 10 minutes
+        run: |
+          echo "Mantenint el joc accessible durant 10 minuts..."
+          sleep 600   # 10 minuts = 600 segons
+          
+          # Al final, aturar tot
+          echo "Temps acabat. Aturant contenidors..."
+          docker compose down
+
+      # 9. (Opcional) Pujar logs com a artefacte per si hi ha errors
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-logs
+          path: |
+            ngrok.log
+            *.log
