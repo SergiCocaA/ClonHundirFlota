@@ -3,4 +3,5 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3000"]  # Ajusta 'main:app' a tu archivo FastAPI
+EXPOSE 3000  # O 8000 si usas default de FastAPI
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3000"]
