@@ -2,27 +2,25 @@ services:
   frontend:
     image: nginx:stable
     ports:
-      - "8080:80"  # Exponemos el puerto 80 del contenedor en 8080 del host
+      - "8080:80"
     volumes:
-      - ./frontend:/usr/share/nginx/html:ro  # Monta archivos JS estáticos
-      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro  # Config Nginx si lo necesitas
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - backend
-    restart: unless-stopped  # Se reinicia solo si no para manualmente
+    restart: unless-stopped
 
   backend:
     build:
-      context: ./backend  # Asumiendo que tienes un Dockerfile para FastAPI aquí
+      context: ./backend
     ports:
-      - "3000:3000"  # Mapea el puerto interno de FastAPI (ajusta si usas 8000 por defecto)
+      - "3000:8000"  # Host:3000 → Container:8000 (FastAPI default)
     environment:
-      - NODE_ENV=production  # Esto parece un leftover de Node; cámbialo a algo como FASTAPI_ENV=production si lo usas
-    # Healthcheck ajustado para FastAPI/Python: usa requests (común en FastAPI) para chequear /health
-    # Asumiendo que tienes un endpoint /health en tu app FastAPI que retorna 200 OK
+      - ENV=production
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import sys; import requests; sys.exit(0 if requests.get('http://localhost:3000/health', timeout=5).status_code == 200 else 1)\" || exit 1"]
+      test: ["CMD-SHELL", "python -c \"import sys; import requests; sys.exit(0 if requests.get('http://localhost:8000/health', timeout=5).status_code == 200 else 1)\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 30s  # Da tiempo al startup de FastAPI
+      start_period: 30s
     restart: unless-stopped
